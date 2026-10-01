@@ -1,0 +1,8 @@
+{
+  "id": "calendar",
+  "name": "Calendar",
+  "description": "Your Google Calendar in a modal, with a reminder before each meeting.",
+  "icon": "CalendarDays",
+  "version": "1.0.0",
+  "minDeck": "0.12.0"
+}
