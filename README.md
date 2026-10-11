@@ -13,8 +13,8 @@ Deck owns the Google connection and hands this plugin a short-lived access token
 token - long-lived access to a whole Google account - never reaches a plugin bundle. The scope
 requested is `calendar.readonly`, so this cannot create, move or delete anything.
 
-Cached event details are stored under the `plugin-` config prefix, which keeps them on this
-machine rather than syncing them to a phone and a server. Disconnecting the account clears them.
+Cached event details are stored in the `plugin-calendar` config, on this machine. Disconnecting
+the account clears them.
 
 ## What it exports
 

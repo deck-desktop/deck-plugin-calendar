@@ -6,8 +6,7 @@
 import { googleToken, configRead, configWrite } from "../shim/bridge.js";
 import { toEvents, weekBounds, weekDays, type CalEvent, type GoogleEvent } from "./events";
 
-/** Cached under the "plugin-" prefix, which config.rs keeps on this device rather than syncing —
- *  meeting titles and join links are exactly what should not ride Syncthing to a phone and a VPS.
+/** Cached under the "plugin-" prefix, in Deck's config dir on this machine.
  *  Deliberately NOT "calendar-cache": that one belongs to Home's rail, and sharing the key would
  *  mean each refresh clobbered the other's shape. */
 const CACHE = "plugin-calendar";
