@@ -4,6 +4,6 @@
   "description": "Your Google Calendar in a modal, with a reminder before each meeting.",
   "icon": "CalendarDays",
   "color": "#f87171",
-  "version": "1.0.2",
-  "minDeck": "0.12.0"
+  "version": "1.0.3",
+  "minDeck": "1.5.0"
 }
