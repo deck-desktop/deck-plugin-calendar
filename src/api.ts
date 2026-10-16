@@ -47,7 +47,7 @@ export async function readCache(): Promise<Cached | null> {
  * data, not just the credential.
  */
 export async function clearCache(): Promise<void> {
-  await configWrite(CACHE, "").catch(() => {});
+  await configWrite(CACHE, "").catch((e) => console.warn("[calendar] cache clear failed", e));
 }
 
 /** The key a week's cache is stamped with: its Sunday, local. */
@@ -121,6 +121,6 @@ export async function fetchWeek(weekOffset: number): Promise<CalEvent[]> {
   }
 
   const cache: Cached = { shape: SHAPE, week: weekKey(weekOffset), events, fetched: Date.now() };
-  await configWrite(CACHE, JSON.stringify(cache)).catch(() => {});
+  await configWrite(CACHE, JSON.stringify(cache)).catch((e) => console.warn("[calendar] cache save failed", e));
   return events;
 }

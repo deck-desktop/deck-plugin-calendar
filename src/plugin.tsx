@@ -522,7 +522,7 @@ export function Provider({ children }: { children: ReactNode }) {
   // no tokens, which is the disconnected case and no other.
   useEffect(() => {
     const un = listen("google-auth-changed", () => {
-      void googleAccount().then((a) => { if (!a) void clearCache(); }).catch(() => {});
+      void googleAccount().then((a) => { if (!a) void clearCache(); }).catch((e) => console.warn("[calendar] account check failed", e));
     });
     return () => { void un.then((f) => f()); };
   }, []);

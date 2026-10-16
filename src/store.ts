@@ -129,7 +129,7 @@ export async function checkReminders(): Promise<void> {
     // true, which costs nothing; doing the same with a Windows notification would pop one every
     // minute for five minutes.
     if (!repeat && !document.hasFocus()) {
-      void notifyOs("Meeting " + when, e.title).catch(() => {});
+      void notifyOs("Meeting " + when, e.title).catch((e) => console.warn("[calendar] meeting notification failed", e));
     }
   }
 }
