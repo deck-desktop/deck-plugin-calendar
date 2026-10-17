@@ -10,8 +10,8 @@
 // reload (see the note on reloadPlugins in src/core/plugins.ts), so an interval started here
 // would be duplicated by each reload with no way to clear the old one. It lives in Provider's
 // effect instead, which unmounts — and therefore cleans up — when the plugin reloads.
-import { notifyOs, openExternal } from "../shim/bridge.js";
-import { toast } from "../shim/ui.js";
+import { openExternal } from "../shim/bridge.js";
+import { notify, dismissNotification } from "../shim/ui.js";
 import { dueSoon, type CalEvent } from "./events";
 import { readCache, weekKey, fetchWeek } from "./api";
 
@@ -40,15 +40,17 @@ export function setOpen(next: boolean): void {
 
 // ---- the reminder loop ----------------------------------------------------------------------
 
+/** The name Deck shows beside this plugin's notifications. */
+const SOURCE = "Calendar";
+
 /**
- * The reminder currently on screen for an event, by event id.
- *
- * Two jobs. It stops the minute tick raising a second toast for a meeting already being
- * announced — otherwise one event produces five, on its way down from "in 5m". And it holds the
- * dismiss handle, because a reminder stays up until the meeting starts rather than expiring on a
- * timer, so something has to take it down.
+ * The events with a reminder up, by id, so the tick can take each one down once its meeting has
+ * started: a reminder stays until then rather than expiring on a timer.
  */
-const announced = new Map<string, () => void>();
+const announced = new Set<string>();
+
+/** Events whose reminder was dismissed: nothing more is said about them this session. */
+const muted = new Set<string>();
 
 /** Minutes since local midnight. */
 const minsNow = (d: Date) => d.getHours() * 60 + d.getMinutes();
@@ -94,43 +96,30 @@ export async function checkReminders(): Promise<void> {
 
   // Take down the reminder for anything that has started: it has said what it had to say, and
   // the countdown on it is no longer true.
-  for (const [id, dismiss] of announced) {
+  for (const id of announced) {
     const e = events.find((x) => x.id === id);
-    if (!e || e.startMin <= now) { dismiss(); announced.delete(id); }
+    if (!e || e.startMin <= now) { dismissNotification(SOURCE, id); announced.delete(id); }
   }
 
   for (const e of dueSoon(events, now, LEAD_MIN)) {
+    if (muted.has(e.id)) continue;
     const mins = e.startMin - now;
-    const when = mins <= 1 ? "now" : `in ${mins}m`;
-    const text = e.link ? `${e.title} ${when} — click to join` : `${e.title} ${when}`;
+    announced.add(e.id);
 
-    // Already up: replace it so the countdown stays honest ("in 4m" a minute after "in 5m")
-    // rather than leaving a stale number on screen for the whole five minutes.
-    const repeat = announced.has(e.id);
-    announced.get(e.id)?.();
-
-    const dismiss = toast(text, "info", {
-      // Stays until the meeting starts. A fixed duration was the wrong shape: the reminder is
-      // true for exactly as long as the meeting has not begun, and a minute of that is no use
-      // to someone who was not at the screen for that minute.
-      ms: 0,
-      onClick: () => {
-        if (e.link) void openExternal(e.link);
-        else setOpen(true);
-      },
+    // Posted again every minute with the same key, so the countdown stays honest ("4 min" a
+    // minute after "5 min"). Deck updates a card that is still up in place, with no second chime
+    // or Windows notification, so only the first post of each meeting announces it.
+    notify({
+      kind: "attention", source: SOURCE, key: e.id,
+      title: mins <= 1 ? "Starting now" : `Meeting in ${mins} min`,
+      body: `${e.title} · ${e.time}`,
+      actions: [
+        e.link
+          ? { label: "Join", primary: true, run: () => void openExternal(e.link).catch((err) => console.warn("[calendar] opening the meeting link failed", err)) }
+          : { label: "Open calendar", primary: true, run: () => setOpen(true) },
+        { label: "Dismiss", run: () => { muted.add(e.id); announced.delete(e.id); dismissNotification(SOURCE, e.id); } },
+      ],
     });
-    announced.set(e.id, dismiss);
-
-    // An in-app toast is invisible when Deck is behind another window or in the tray, which is
-    // exactly when a reminder matters most. The OS one is raised only in that case, so a focused
-    // Deck does not announce the same meeting twice.
-    //
-    // First announcement only. The in-app toast is REPLACED each minute to keep its countdown
-    // true, which costs nothing; doing the same with a Windows notification would pop one every
-    // minute for five minutes.
-    if (!repeat && !document.hasFocus()) {
-      void notifyOs("Meeting " + when, e.title).catch((e) => console.warn("[calendar] meeting notification failed", e));
-    }
   }
 }
 
