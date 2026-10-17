@@ -14,6 +14,7 @@ import { CalendarDays, RotateCw, Video, ChevronLeft, ChevronRight, AlertCircle, 
   X, MapPin, Users, Repeat, AlignLeft } from "lucide-react";
 import { googleAccount, openExternal } from "../shim/bridge.js";
 import { listen } from "../shim/event.js";
+import { StatusItem } from "../shim/ui.js";
 import { currentIndex, layout, until, weekDays, type CalEvent, type Guest } from "./events";
 import { clearCache, fetchWeek, readCache, weekKey } from "./api";
 // Aliased: the grid has its own `setOpen` for the details popover, and two things called
@@ -565,37 +566,29 @@ export function Status() {
   const idx = currentIndex(today, nowMin);
   const next = idx >= 0 ? today[idx] : null;
 
+  // Cut here because the label is plain text: a long meeting title would otherwise push the rest
+  // of the footer aside. The full title is in the tooltip.
+  const name = next && next.title.length > 16 ? next.title.slice(0, 15) + "…" : next?.title;
+
   return (
-    <button onClick={() => setModalOpen(true)}
-      title={next ? `${next.title} — open the calendar` : "Open the calendar"}
-      className="flex items-center gap-1.5 text-text-muted transition hover:text-text-primary">
-      <CalendarDays size={12} />
-      {next ? (
-        <>
-          <span className="max-w-[16ch] truncate">{next.title}</span>
-          <span style={{ color: "var(--accent)" }}>{until(next, nowMin)}</span>
-          {next.link && (
-            // A nested button would be invalid HTML inside the readout's button, so this is a
-            // span that stops the click reaching it.
-            <span role="button" tabIndex={0}
-              onClick={(ev) => { ev.stopPropagation(); void openExternal(next.link); }}
-              onKeyDown={(ev) => {
-                if (ev.key === "Enter" || ev.key === " ") {
-                  ev.stopPropagation();
-                  void openExternal(next.link);
-                }
-              }}
-              title="Join"
-              className="rounded px-1 transition hover:bg-white/10"
-              style={{ color: "var(--accent)" }}>
-              <Video size={11} />
-            </span>
-          )}
-        </>
-      ) : (
-        <span>No meetings</span>
+    <div className="flex items-center">
+      <StatusItem
+        icon={<CalendarDays />}
+        color="var(--text-secondary)"
+        label={name ?? "No meetings"}
+        detail={next ? until(next, nowMin) : undefined}
+        title={next ? `${next.title} — open the calendar` : "Open the calendar"}
+        onClick={() => setModalOpen(true)}
+      />
+      {next?.link && (
+        // Beside the readout rather than inside it: a button cannot hold another button.
+        <button onClick={() => void openExternal(next.link)} title="Join"
+          className="flex h-[22px] items-center rounded-[4px] px-1.5 transition-colors hover:bg-white/[0.06]"
+          style={{ color: "var(--accent)" }}>
+          <Video size={13} />
+        </button>
       )}
-    </button>
+    </div>
   );
 }
 
