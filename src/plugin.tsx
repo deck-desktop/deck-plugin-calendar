@@ -13,6 +13,7 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactN
 import { CalendarDays, RotateCw, Video, ChevronLeft, ChevronRight, AlertCircle, Link2,
   X, MapPin, Users, Repeat, AlignLeft } from "lucide-react";
 import { googleAccount, openExternal } from "../shim/bridge.js";
+import { createPortal } from "../shim/react-dom.js";
 import { listen } from "../shim/event.js";
 import { StatusItem } from "../shim/ui.js";
 import { currentIndex, layout, until, weekDays, type CalEvent, type Guest } from "./events";
@@ -28,12 +29,15 @@ const DAY_PX = 24 * HOUR_PX;
 /** Fallback when a calendar has no colour of its own. */
 const DEFAULT_COLOR = "#7c6df2";
 
-const WEEKDAYS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+/** A toolbar icon button, the size of the Editor's own. */
+const toolBtn = "grid size-7 place-items-center rounded-lg text-text-muted transition-colors hover:bg-white/5 hover:text-text-primary disabled:opacity-40";
 
 /** Every line in the grid. One value so the hour rules and the day dividers cannot disagree —
  *  and far fainter than --border-subtle, which is sized for a panel edge and reads as white
  *  once it is repeated 24 times down and 7 across. */
-const LINE = "rgba(255,255,255,0.055)";
+const LINE = "rgb(var(--overlay-rgb) / 0.055)";
 
 const sameDay = (a: Date, b: Date) => a.toDateString() === b.toDateString();
 
@@ -67,10 +71,9 @@ const GUEST_MARK: Record<Guest["status"], string> = {
 /**
  * Event details, beside the block that was clicked.
  *
- * Not a portal: a plugin is handed React but not ReactDOM, so createPortal is not available to
- * it. Fixed positioning does the same job here — it escapes the scroll container without needing
- * to render outside the tree — and the coordinates come from the click, clamped so a meeting in
- * Saturday's column does not open off the right edge.
+ * Not a portal of its own: it renders inside the modal, which is portalled, and above it there.
+ * Fixed positioning escapes the grid's scroll container, and the coordinates come from the
+ * click, clamped so a meeting in Saturday's column does not open off the right edge.
  *
  * Read-only, deliberately. Editing, deleting and RSVP all need calendar write scope, which would
  * mean a new consent screen for buttons nobody asked for yet.
@@ -98,7 +101,7 @@ function Details({ e, at, onClose }: { e: CalEvent; at: Anchor; onClose: () => v
           the context you are reading the event against. */}
       <div className="fixed inset-0 z-40" onClick={onClose} />
       <div
-        className="fixed z-50 overflow-hidden rounded-xl border border-subtle shadow-2xl"
+        className="fixed z-50 animate-[menu-in_110ms_ease-out] overflow-hidden rounded-[10px] border border-subtle shadow-2xl"
         style={{
           background: "var(--bg-card)",
           width: W,
@@ -110,16 +113,16 @@ function Details({ e, at, onClose }: { e: CalEvent; at: Anchor; onClose: () => v
         <div className="flex items-start gap-2 px-4 pt-3">
           <span className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: color }} />
           <div className="min-w-0 flex-1">
-            <div className={"text-sm font-semibold leading-snug text-text-primary " +
+            <div className={"text-[13px] font-semibold leading-snug text-text-primary " +
               (e.status === "declined" ? "line-through opacity-70" : "")}>
               {e.title}
             </div>
-            <div className="mt-0.5 text-[11px] text-text-secondary">
+            <div className="mt-0.5 text-[11.5px] text-text-secondary">
               {when}{e.time && ` · ${e.time} – ${e.end}`}{e.allDay && " · All day"}
             </div>
           </div>
-          <button onClick={onClose}
-            className="-mr-1 shrink-0 rounded p-1 text-text-muted transition hover:bg-white/5 hover:text-text-primary">
+          <button onClick={onClose} title="Close"
+            className="-mr-1 grid size-6 shrink-0 place-items-center rounded-md text-text-muted transition-colors hover:bg-white/5 hover:text-text-primary">
             <X size={13} />
           </button>
         </div>
@@ -127,8 +130,8 @@ function Details({ e, at, onClose }: { e: CalEvent; at: Anchor; onClose: () => v
         <div className="max-h-72 space-y-2.5 overflow-y-auto scroll-thin px-4 pb-3 pt-3">
           {e.link && (
             <button onClick={() => void openExternal(e.link)}
-              className="flex w-full items-center justify-center gap-2 rounded-lg py-2 text-xs font-semibold text-white transition hover:brightness-110"
-              style={{ background: "var(--accent-strong)" }}>
+              className="flex h-8 w-full items-center justify-center gap-2 rounded-lg text-[12.5px] font-medium text-white transition hover:brightness-110"
+              style={{ background: "var(--accent)" }}>
               <Video size={13} /> Join
             </button>
           )}
@@ -156,7 +159,7 @@ function Details({ e, at, onClose }: { e: CalEvent; at: Anchor; onClose: () => v
                   {guests.map((g, i) => (
                     <li key={`${g.name}-${i}`} className="flex items-center gap-1.5 text-[11px]">
                       <span className="w-2.5 shrink-0 text-center text-[10px]"
-                        style={{ color: g.status === "declined" ? "var(--danger)" : "var(--text-muted)" }}>
+                        style={{ color: g.status === "declined" ? "rgb(var(--tone-red-400))" : "var(--text-muted)" }}>
                         {GUEST_MARK[g.status]}
                       </span>
                       <span className={"min-w-0 truncate " +
@@ -310,38 +313,34 @@ function Calendar() {
     <div className="flex h-full min-h-0 flex-col">
       {/* Header */}
       <div className="flex shrink-0 items-center gap-3 px-5 py-3">
-        <CalendarDays size={17} style={{ color: "var(--accent)" }} />
-        <h1 className="text-base font-semibold text-text-primary">{rangeLabel(days)}</h1>
+        <CalendarDays size={16} className="text-text-muted" />
+        <h1 className="text-[15px] font-semibold text-text-primary">{rangeLabel(days)}</h1>
         {offset !== 0 && (
           <button onClick={() => setOffset(0)}
-            className="rounded-md border border-subtle px-2 py-0.5 text-xs text-text-secondary transition hover:border-strong hover:text-text-primary">
+            className="flex h-7 items-center rounded-lg border border-subtle bg-elev px-2.5 text-[12px] text-text-secondary transition-colors hover:border-strong hover:text-text-primary">
             Today
           </button>
         )}
-        <span className="ml-auto flex items-center gap-1">
-          {fetched && <span className="mr-1 text-[11px] text-text-muted">{ago(fetched)}</span>}
-          <button onClick={() => setOffset(offset - 1)} title="Previous week"
-            className="rounded-md p-1.5 text-text-muted transition hover:bg-white/5 hover:text-text-primary">
+        <span className="ml-auto flex items-center gap-0.5">
+          {fetched && <span className="mr-1.5 text-[11px] text-text-muted">{ago(fetched)}</span>}
+          <button onClick={() => setOffset(offset - 1)} title="Previous week" className={toolBtn}>
             <ChevronLeft size={15} />
           </button>
-          <button onClick={() => setOffset(offset + 1)} title="Next week"
-            className="rounded-md p-1.5 text-text-muted transition hover:bg-white/5 hover:text-text-primary">
+          <button onClick={() => setOffset(offset + 1)} title="Next week" className={toolBtn}>
             <ChevronRight size={15} />
           </button>
-          <button onClick={() => void load(offset, true)} disabled={busy} title="Refresh"
-            className="rounded-md p-1.5 text-text-muted transition hover:bg-white/5 hover:text-text-primary disabled:opacity-40">
+          <button onClick={() => void load(offset, true)} disabled={busy} title="Refresh" className={toolBtn}>
             <RotateCw size={14} className={busy ? "animate-spin" : ""} />
           </button>
-          <button onClick={() => setModalOpen(false)} title="Close"
-            className="rounded-md p-1.5 text-text-muted transition hover:bg-white/5 hover:text-text-primary">
+          <button onClick={() => setModalOpen(false)} title="Close" className={toolBtn}>
             <X size={15} />
           </button>
         </span>
       </div>
 
       {err && (
-        <div className="mx-5 mb-2 flex items-start gap-2 rounded-lg border border-subtle px-3 py-2 text-xs"
-          style={{ color: disconnected ? "var(--text-secondary)" : "var(--danger)" }}>
+        <div className="mx-5 mb-2 flex items-start gap-2 rounded-lg border border-subtle bg-elev px-3 py-2 text-[12px] leading-relaxed"
+          style={{ color: disconnected ? "var(--text-secondary)" : "rgb(var(--tone-red-400))" }}>
           {disconnected ? <Link2 size={13} className="mt-0.5 shrink-0" />
             : <AlertCircle size={13} className="mt-0.5 shrink-0" />}
           <span className="min-w-0">
@@ -359,14 +358,13 @@ function Calendar() {
           const today = sameDay(d, now);
           return (
             <div key={d.toDateString()} className="flex-1 border-l pb-1.5 text-center" style={{ borderColor: LINE }}>
-              <div className="text-[10px] font-medium tracking-wide"
+              <div className="text-[11px] font-medium"
                 style={{ color: today ? "var(--accent)" : "var(--text-muted)" }}>
                 {WEEKDAYS[d.getDay()]}
               </div>
-              <div className="mx-auto flex h-7 w-7 items-center justify-center rounded-full text-sm font-medium"
-                style={today
-                  ? { background: "var(--accent-strong)", color: "#fff" }
-                  : { color: "var(--text-secondary)" }}>
+              <div className={"mx-auto flex h-7 w-7 items-center justify-center rounded-full text-[13px] font-medium " +
+                (today ? "text-white" : "text-text-secondary")}
+                style={today ? { background: "var(--accent)" } : undefined}>
                 {d.getDate()}
               </div>
             </div>
@@ -377,7 +375,7 @@ function Calendar() {
       {/* All-day band. Only drawn when something is in it — an empty strip is wasted height. */}
       {hasAllDay && (
         <div className="flex shrink-0 border-b border-subtle">
-          <div className="w-14 shrink-0 pr-2 pt-1 text-right text-[10px] text-text-muted">all day</div>
+          <div className="w-14 shrink-0 pr-2 pt-1 text-right text-[10.5px] text-text-muted">All day</div>
           {days.map((d, i) => (
             <div key={d.toDateString()} className="min-w-0 flex-1 space-y-0.5 border-l p-1" style={{ borderColor: LINE }}>
               {allDayRows[i].map((e) => (
@@ -441,8 +439,8 @@ function Calendar() {
                 {today && (
                   <div className="pointer-events-none absolute inset-x-0 z-10 flex items-center"
                     style={{ top: (nowMin / 60) * HOUR_PX }}>
-                    <span className="-ml-1 h-2.5 w-2.5 rounded-full" style={{ background: "#f2544b" }} />
-                    <span className="h-px flex-1" style={{ background: "#f2544b" }} />
+                    <span className="-ml-1 h-2.5 w-2.5 rounded-full" style={{ background: "rgb(var(--tone-red-400))" }} />
+                    <span className="h-px flex-1" style={{ background: "rgb(var(--tone-red-400))" }} />
                   </div>
                 )}
               </div>
@@ -459,9 +457,8 @@ function Calendar() {
 /**
  * The modal the grid lives in.
  *
- * Not a portal — a plugin gets React but not ReactDOM, the same constraint `Details` above works
- * around. `position: fixed` escapes the Provider's place in the tree just as well, and the z-index
- * sits below the toast stack's z-[200] so a reminder still paints over an open calendar.
+ * Portalled to <body>, so no transformed or clipped ancestor of the Provider can trap it. The
+ * z-index sits below the toast stack's z-[200] so a reminder still paints over an open calendar.
  *
  * Escape closes it. `Details` listens for Escape too, so one press with a popover open closes
  * both — acceptable, and better than the alternative of the popover swallowing the key and
@@ -474,7 +471,7 @@ function Modal() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/50"
       onClick={() => setModalOpen(false)}>
       {/* Stop the click from reaching the backdrop, or every click inside the grid closes it. */}
@@ -482,11 +479,12 @@ function Modal() {
         // Grows with the window instead of stopping at a fixed ceiling: seven day columns is the
         // layout that most wants width, and 1100px left half a large screen empty. The 94vw
         // floor still keeps it off the edges, and 1600px stops it becoming a wall of grid.
-        className="flex h-[88vh] w-[min(1600px,94vw)] flex-col overflow-hidden rounded-xl border border-subtle shadow-2xl"
+        className="flex h-[88vh] w-[min(1600px,94vw)] flex-col overflow-hidden rounded-[12px] border border-subtle shadow-2xl"
         style={{ background: "var(--bg-card)" }}>
         <Calendar />
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
