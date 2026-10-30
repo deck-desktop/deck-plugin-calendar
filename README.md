@@ -4,6 +4,8 @@ Your Google Calendar as a week grid, in an overlay over whatever you were doing,
 before each meeting. There is no tab: open it from its footer readout, or from the command palette
 with **Calendar: open**.
 
+![Calendar](docs/screenshot.png)
+
 ## What it does
 
 - **The footer readout** shows your next meeting today and how long until it starts, with a
